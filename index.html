@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUMPCORN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        }
+        .tap-effect {
+            transition: transform 0.2s ease-in-out, box-shadow 0.3s ease;
+        }
+        .tap-effect:active {
+            transform: scale(0.9);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+        .coin-pulse {
+            animation: pulse 0.5s ease-in-out;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+        .glow {
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+        }
+        .float-coin {
+            position: absolute;
+            pointer-events: none;
+            animation: float 1s ease-out forwards;
+        }
+        @keyframes float {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
+        }
+        .nav-button {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .nav-button.active {
+            background-color: #facc15;
+            color: #1e3a8a;
+            border-radius: 10px;
+        }
+        .withdraw-btn {
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .withdraw-btn:hover {
+            background-color: #eab308;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="text-white flex flex-col h-screen max-w-md mx-auto font-sans">
+    <!-- Header with Coin Counter -->
+    <header class="text-center py-6">
+        <h1 class="text-4xl font-extrabold text-yellow-300 drop-shadow-md">PUMPCORN</h1>
+        <div class="mt-3 flex justify-center items-center bg-gray-800 bg-opacity-50 rounded-full px-4 py-2 glow">
+            <img src="photo.jpg" alt="Coin Icon" class="w-10 h-10 mr-3 rounded-full">
+            <span id="coinBalance" class="text-3xl font-semibold text-yellow-200">0</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="homeTab" class="flex-1 flex flex-col items-center justify-center relative">
+        <div id="tapArea" class="tap-effect cursor-pointer relative">
+            <img src="photo.jpg" alt="PUMPCORN Logo" class="w-40 h-40 rounded-full glow">
+        </div>
+        <p class="mt-6 text-xl text-yellow-100 drop-shadow-sm">Tap to earn $PUMPCORN!</p>
+        <div id="coinContainer" class="absolute inset-0 pointer-events-none"></div>
+    </main>
+
+    <!-- Wallet Tab (Hidden by Default) -->
+    <section id="walletTab" class="flex-1 flex flex-col items-center justify-center hidden">
+        <h2 class="text-3xl font-bold mb-6 text-yellow-300">Wallet</h2>
+        <div class="bg-gray-800 bg-opacity-70 p-6 rounded-xl w-4/5 text-center glow">
+            <p class="text-xl text-yellow-100">Balance: <span id="walletBalance" class="font-semibold">0</span> $PUMPCORN</p>
+            <button id="withdrawBtn" class="mt-6 bg-yellow-400 text-gray-900 px-6 py-3 rounded-lg withdraw-btn font-semibold">Withdraw</button>
+        </div>
+    </section>
+
+    <!-- Bottom Navigation -->
+    <nav class="bg-gray-900 bg-opacity-80 p-4 flex justify-between items-center shadow-lg">
+        <button id="homeBtn" class="flex-1 text-center text-yellow-300 font-semibold nav-button py-2 active">Home</button>
+        <button id="walletBtn" class="flex-1 text-center text-yellow-300 font-semibold nav-button py-2">Wallet</button>
+    </nav>
+
+    <script>
+        // Elements
+        const coinBalanceElement = document.getElementById('coinBalance');
+        const walletBalanceElement = document.getElementById('walletBalance');
+        const tapArea = document.getElementById('tapArea');
+        const coinContainer = document.getElementById('coinContainer');
+        const homeTab = document.getElementById('homeTab');
+        const walletTab = document.getElementById('walletTab');
+        const homeBtn = document.getElementById('homeBtn');
+        const walletBtn = document.getElementById('walletBtn');
+        const withdrawBtn = document.getElementById('withdrawBtn');
+
+        // Initialize or load balance from localStorage
+        let balance = localStorage.getItem('pumpcornBalance');
+        if (!balance) {
+            // First launch: assign random balance between 10k and 20k
+            balance = Math.floor(Math.random() * (20000 - 10000 + 1)) + 10000;
+            localStorage.setItem('pumpcornBalance', balance);
+        } else {
+            balance = parseInt(balance, 10);
+        }
+
+        // Update balance display
+        function updateBalance() {
+            coinBalanceElement.textContent = balance.toLocaleString();
+            walletBalanceElement.textContent = balance.toLocaleString();
+            coinBalanceElement.classList.add('coin-pulse');
+            // Save balance to localStorage
+            localStorage.setItem('pumpcornBalance', balance);
+        }
+
+        // Create floating coin effect
+        function createFloatingCoin(x, y) {
+            const coin = document.createElement('div');
+            coin.className = 'float-coin';
+            coin.innerHTML = '<span class="text-yellow-400 text-lg">+1</span>';
+            coin.style.left = `${x}px`;
+            coin.style.top = `${y}px`;
+            coinContainer.appendChild(coin);
+            setTimeout(() => coin.remove(), 1000);
+        }
+
+        // Tap to earn coins
+        tapArea.addEventListener('click', (e) => {
+            balance += 1; // Earn 1 coin per tap
+            updateBalance();
+            tapArea.classList.add('coin-pulse');
+
+            // Get tap position for floating coin effect
+            const rect = tapArea.getBoundingClientRect();
+            const x = e.clientX - rect.left - 20;
+            const y = e.clientY - rect.top - 20;
+            createFloatingCoin(x, y);
+        });
+
+        // Tab navigation
+        homeBtn.addEventListener('click', () => {
+            homeTab.classList.remove('hidden');
+            walletTab.classList.add('hidden');
+            homeBtn.classList.add('active');
+            walletBtn.classList.remove('active');
+        });
+
+        walletBtn.addEventListener('click', () => {
+            walletTab.classList.remove('hidden');
+            homeTab.classList.add('hidden');
+            walletBtn.classList.add('active');
+            homeBtn.classList.remove('active');
+        });
+
+        // Withdraw button (placeholder functionality)
+        withdrawBtn.addEventListener('click', () => {
+            alert('Withdraw functionality coming soon!');
+        });
+
+        // Initialize
+        updateBalance();
+    </script>
+</body>
+</html>
